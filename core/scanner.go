@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -38,6 +40,7 @@ func readDirNames(dirname string) ([]FolderContent, error) {
 	// FolderContent Liste anlegen
 	ret := make([]FolderContent, 0, len(names))
 	for _, v := range names {
+
 		// sub-element Datei oder Ordner?
 		tmppath := filepath.Join(dirname, v)
 		info, err := os.Stat(tmppath)
@@ -45,6 +48,11 @@ func readDirNames(dirname string) ([]FolderContent, error) {
 			return nil, err
 		}
 		isFile := !info.IsDir()
+
+		// UTF8 FIX: Text normalization
+		// https://blog.golang.org/normalization
+		v = norm.NFC.String(v)
+
 		// hinzufügen
 		ret = append(ret, FolderContent{Name: v, IsFile: isFile})
 	}
@@ -76,6 +84,10 @@ func ScanFolder(rootpath string, db SfDb, debug bool) (newDB SfDb, changed bool,
 		if err != nil {
 			return err
 		}
+
+		// UTF8 FIX: Text normalization
+		// https://blog.golang.org/normalization
+		relPath = norm.NFC.String(relPath)
 
 		// Eckdaten des betrachteten Elements ermitteln
 		isFile := !info.IsDir()
