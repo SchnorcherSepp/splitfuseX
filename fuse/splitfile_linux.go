@@ -2,6 +2,7 @@ package fuse
 
 import (
 	"fmt"
+	"io"
 
 	"splitfuseX/backbone"
 	"splitfuseX/core"
@@ -98,7 +99,7 @@ func (f *SplitFile) Read(buf []byte, offset int64) (fuse.ReadResult, fuse.Status
 		// Nun kommt die Stelle, warum das in einer Schleife ist!
 		// Kommt es hier zu einem Fehler, dann initialisieren wir den FH neu.
 		// Das ist natürlich kein Allheilmittel und darf nicht all zu oft passieren!
-		if openErr != nil && f.errRetrys > 0 {
+		if openErr != nil && openErr != io.EOF && f.errRetrys > 0 {
 			debug(f.debug, LOGERROR, fmt.Sprintf("Read(): retry (%d) read bytes [chunk=%d, fileId=%s, offset=%d, len=%d]", f.errRetrys, chunkNr, fileId, chunkOffset, readLength), openErr)
 			f.Release()
 
@@ -109,7 +110,7 @@ func (f *SplitFile) Read(buf []byte, offset int64) (fuse.ReadResult, fuse.Status
 		// ERROR (alles ist aus)
 		// Es gibt weiterhin einen Lesefehler!
 		// Da dieser Punkt im Code erreicht wurde, nehme ich an, dass alles hoffnungslos ist ...
-		if openErr != nil {
+		if openErr != nil && openErr != io.EOF {
 			debug(f.debug, LOGERROR, fmt.Sprintf("Read(): can't read bytes [chunk=%d, fileId=%s, offset=%d, len=%d]", chunkNr, fileId, chunkOffset, readLength), openErr)
 			return fuse.ReadResultData([]byte{}), fuse.EIO
 		}
