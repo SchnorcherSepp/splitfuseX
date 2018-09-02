@@ -102,7 +102,7 @@ func (fh *FileHandler) Download(requestedOffset int64, length int) ([]byte, erro
 	}
 
 	/*
-	 * Was ist nun sichergestellt
+	 * Was ist nun sichergestellt?
 	 * Die angeforderten Daten beginnen irgendwo im Bereich des Caches.
 	 * Jedoch ist NICHT gesagt, dass auch alle Daten hier sind.
 	 * Wurde das Ende des Datei auf Google Drive erreicht, dann können am Ende Daten fehlen!

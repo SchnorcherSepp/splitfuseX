@@ -22,6 +22,7 @@ type SplitFile struct {
 	fileIds   []string
 	apiClient backbone.Client
 	fh        map[int]*fh.FileHandler
+	errRetrys int // Wie oft darf nach einem Lesefehler den FH neu initialisiert werden? (default 0)
 }
 
 // Release wird aufgerufen, wenn .close() auf die Datei im FUSE aufgerufen wird.
@@ -67,31 +68,56 @@ func (f *SplitFile) Read(buf []byte, offset int64) (fuse.ReadResult, fuse.Status
 		f.fh = make(map[int]*fh.FileHandler)
 	}
 
-	// Ich muss nun auf den chunk zugreifen und brauche dafür ein fh
-	// Da diese Operation teuer ist, speichere ich alte filehandler und verwende sie wieder!
-	var openErr error
-	fhForChunk, ok := f.fh[chunkNr]
-	if !ok {
-		// gibt noch keinen FH für diesen Chunk
-		debug(f.debug, LOGINFO, fmt.Sprintf("Read(): new fh for chunk %d (fileId=%s)", chunkNr, fileId), nil)
+	//----------------------------------------------------------------------------------------------------------------//
+	for {
 
-		// fhForChunk mit neuem FH beschreiben
-		fhForChunk, openErr = fh.NewFileHandler(f.apiClient, fileId, chunkOffset)
+		// Ich muss nun auf den chunk zugreifen und brauche dafür ein fh
+		// Da diese Operation teuer ist, speichere ich alte filehandler und verwende sie wieder!
+		var openErr error
+		fhForChunk, ok := f.fh[chunkNr]
+
+		if !ok {
+			// gibt noch keinen FH für diesen Chunk
+			debug(f.debug, LOGINFO, fmt.Sprintf("Read(): new fh for chunk %d (fileId=%s)", chunkNr, fileId), nil)
+
+			// fhForChunk mit neuem FH beschreiben
+			fhForChunk, openErr = fh.NewFileHandler(f.apiClient, fileId, chunkOffset)
+			if openErr != nil {
+				debug(f.debug, LOGERROR, fmt.Sprintf("Read(): can't open new fh for chunk %d (fileId=%s)", chunkNr, fileId), openErr)
+				return fuse.ReadResultData([]byte{}), fuse.EIO
+			}
+
+			// fh speichern !!
+			f.fh[chunkNr] = fhForChunk
+		}
+
+		// Daten lesen
+		buf, openErr = fhForChunk.Download(chunkOffset, int(readLength))
+
+		// ERROR (mit Hoffnung)
+		// Nun kommt die Stelle, warum das in einer Schleife ist!
+		// Kommt es hier zu einem Fehler, dann initialisieren wir den FH neu.
+		// Das ist natürlich kein Allheilmittel und darf nicht all zu oft passieren!
+		if openErr != nil && f.errRetrys > 0 {
+			debug(f.debug, LOGERROR, fmt.Sprintf("Read(): retry (%d) read bytes [chunk=%d, fileId=%s, offset=%d, len=%d]", f.errRetrys, chunkNr, fileId, chunkOffset, readLength), openErr)
+			f.Release()
+
+			f.errRetrys--
+			continue
+		}
+
+		// ERROR (alles ist aus)
+		// Es gibt weiterhin einen Lesefehler!
+		// Da dieser Punkt im Code erreicht wurde, nehme ich an, dass alles hoffnungslos ist ...
 		if openErr != nil {
-			debug(f.debug, LOGERROR, fmt.Sprintf("Read(): can't open new fh for chunk %d (fileId=%s)", chunkNr, fileId), openErr)
+			debug(f.debug, LOGERROR, fmt.Sprintf("Read(): can't read bytes [chunk=%d, fileId=%s, offset=%d, len=%d]", chunkNr, fileId, chunkOffset, readLength), openErr)
 			return fuse.ReadResultData([]byte{}), fuse.EIO
 		}
 
-		// fh speichern !!
-		f.fh[chunkNr] = fhForChunk
+		// ENDE erreicht -> also gab es keine Fehler
+		break // Schleife verlassen
 	}
-
-	// Daten lesen
-	buf, openErr = fhForChunk.Download(chunkOffset, int(readLength))
-	if openErr != nil {
-		debug(f.debug, LOGERROR, fmt.Sprintf("Read(): can't read bytes [chunk=%d, fileId=%s, offset=%d, len=%d]", chunkNr, fileId, chunkOffset, readLength), openErr)
-		return fuse.ReadResultData([]byte{}), fuse.EIO
-	}
+	//----------------------------------------------------------------------------------------------------------------//
 
 	// die gelesenen Daten entschlüsseln
 	core.CryptBytes(buf, chunkOffset, chunkKey)

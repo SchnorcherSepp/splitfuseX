@@ -33,7 +33,7 @@ func TestCheckDbUpdate(t *testing.T) {
 
 	// test filesystem
 	fs := SplitFs{
-		debug:      true, // DEBUG: setze das auf true, wenn du mehr sehen willst (DEBUG)
+		debug:      false, // DEBUG: setze das auf true, wenn du mehr sehen willst (DEBUG)
 		interval:   2,
 		dbFileName: "index.db",
 		keyFile:    core.KeyFile{},

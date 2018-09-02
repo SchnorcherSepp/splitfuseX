@@ -255,6 +255,7 @@ func (fs *SplitFs) Open(name string, flags uint32, context *fuse.Context) (file 
 		chunkKeys: chunkKeys,
 		fileIds:   fileIds,
 		apiClient: fs.apiClient,
+		errRetrys: 3, // max. 3x darf der FH ungestraft einen Lesefehler verursachen
 	}, fuse.OK
 }
 
