@@ -71,7 +71,7 @@ func (fs *SplitFs) checkDbUpdate() int {
 	for _, file := range fs.apiClient.FileList() {
 		if file.Name == fs.dbFileName {
 			// betrachtete Datei hat den richtigen Namen
-			if newestFile.ModifiedTime.Unix() < file.ModifiedTime.Unix() {
+			if newestFile.ModifiedTime < file.ModifiedTime {
 				// betrachtete Datei ist neuer als 'newestFile'
 				newestFile = file
 			}
@@ -79,14 +79,14 @@ func (fs *SplitFs) checkDbUpdate() int {
 	}
 
 	// wurde etwas gefunden?
-	if newestFile.ModifiedTime.Unix() <= 0 {
+	if newestFile.ModifiedTime <= 0 {
 		// db file nicht da? ka. einfach abbrechen
 		debug(fs.debug, LOGERROR, fmt.Sprintf("checkDbUpdate(): no db file found: '%s'", fs.dbFileName), nil)
 		return 403
 	}
 
 	// ist das DBfile unverändert?
-	if newestFile.ModifiedTime.Unix() == fs.lastDbMtime {
+	if newestFile.ModifiedTime == fs.lastDbMtime {
 		// Datei ist noch gleich
 		debug(fs.debug, LOGINFO, fmt.Sprintf("checkDbUpdate(): file unchanged: '%d'", fs.lastDbMtime), nil)
 		return 404
@@ -115,7 +115,7 @@ func (fs *SplitFs) checkDbUpdate() int {
 
 	// ACHTUNG: Nachdem die DB gesetzt wurde, muss nun auch fs.lastDbMtime gespeichert werden
 	// Vorher darf das nicht passieren, weil sonst die DB nicht geladen wird im Fehlerfall
-	fs.lastDbMtime = newestFile.ModifiedTime.Unix()
+	fs.lastDbMtime = newestFile.ModifiedTime
 
 	// log schreiben (debug=true)
 	debug(fs.debug, LOGINFO, fmt.Sprintf("checkDbUpdate(): OK: %s, %d, %s", fs.dbFileName, fs.lastDbMtime, newestFile.Id), nil)

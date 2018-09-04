@@ -62,10 +62,11 @@ var (
 	normalClient = normal.Flag("client", "Pfad zur client_secret Datei (für 'drive')").Default("client_secret.json").String()
 	normalToken  = normal.Flag("token", "Pfad zur Token Datei (für 'drive')").Default("token.json").String()
 	normalKey    = normal.Flag("key", "Pfad zum Keyfile").Default("splitfuse.key").ExistingFile()
+	normalCache  = normal.Flag("cache", "Puffert die FileList in einer Datei und beschleunigt den Start des FUSE. Ein leerer String deaktiviert diese Funktion!").Default("cache.dat").String()
 )
 
 func main() {
-	app.Version("splitfuseX 3.12")
+	app.Version("splitfuseX 3.13")
 	app.UsageTemplate(kingpin.LongHelpTemplate)
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 
@@ -92,7 +93,7 @@ func main() {
 
 	case normal.FullCommand(): //_______________________________________________________________________________________
 		// FUSE MOUNT (Linux only)
-		client := clientModule(*normalMod, *normalChunks, *normalClient, *normalToken)
+		client := clientModule(*normalMod, *normalChunks, *normalClient, *normalToken, *normalCache)
 		fuse.MountNormal(client, *normalDbName, *normalKey, *normalMount, *debug, false)
 	}
 }
@@ -133,10 +134,10 @@ func scanFunc(keyFile, dbFile, dir string, debug bool) bool {
 }
 
 // clientModule ist eine Hilfsfunktion die je nach 'module' eine andere Client Implementierung zurück gibt.
-func clientModule(module, destination, apiClient, apiToken string) backbone.Client {
+func clientModule(module, destination, apiClient, apiToken, cacheFile string) backbone.Client {
 	switch module {
 	case "drive":
-		return drive.NewApiClient(apiClient, apiToken, destination)
+		return drive.NewApiClient(apiClient, apiToken, cacheFile, destination)
 
 	case "local":
 		return local.NewDiskClient(destination)
@@ -167,7 +168,7 @@ func uploadFunc(keyFile, dbFile, dir, module, destination, apiClient, apiToken s
 	}
 
 	// client erstellen (drive oder local)
-	client := clientModule(module, destination, apiClient, apiToken)
+	client := clientModule(module, destination, apiClient, apiToken, "")
 
 	// fileList initialisieren
 	err = client.InitFileList()
@@ -279,7 +280,7 @@ func cleanFunc(keyFile, dbFile, module, destination, apiClient, apiToken string)
 	}
 
 	// client erstellen (drive oder local)
-	client := clientModule(module, destination, apiClient, apiToken)
+	client := clientModule(module, destination, apiClient, apiToken, "")
 
 	// fileList initialisieren
 	err = client.InitFileList()

@@ -1,8 +1,10 @@
 package drive
 
 import (
+	"encoding/gob"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -19,8 +21,9 @@ const folderMimeType = "application/vnd.google-apps.folder"
 type ApiClient struct {
 	api                  *drive.Service
 	folderId             string
+	cachePath            string
 	apiQuerySize         int // default 1000
-	fileList             map[string]*drive.File
+	fileList             map[string]*backbone.FileObject
 	changeStartPageToken string
 }
 
@@ -100,9 +103,21 @@ func (client *ApiClient) InitFileList() error {
 		client.folderId = rootId.Id
 	}
 
+	// CACHE ????
+	if client.cachePath != "" {
+		err := client.loadStatus()
+		if err == nil {
+			// juhu! -> fin
+			return nil
+		} else {
+			// :*(
+			fmt.Printf("%v\n", err)
+		}
+	}
+
 	// config
 	query := fmt.Sprintf("trashed = false and mimeType != '%s' and '%s' in parents", folderMimeType, client.folderId)
-	fields := "nextPageToken, files(id, name, size, md5Checksum, modifiedTime)"
+	fields := "nextPageToken, files(id, name, size, modifiedTime)"
 	spaces := "drive"               // Supported values are 'drive', 'appDataFolder' and 'photos'.
 	corpora := "user"               // The user corpus includes all files in "My Drive" and "Shared with me"
 	pageSize := client.apiQuerySize // split big file lists in pages (default 1000)
@@ -119,7 +134,7 @@ func (client *ApiClient) InitFileList() error {
 	client.changeStartPageToken = startPageTokenObj.StartPageToken
 
 	// get all relevant files
-	newList := make(map[string]*drive.File)
+	newList := make(map[string]*backbone.FileObject)
 	pageToken := ""
 	for {
 		// read a result page
@@ -134,7 +149,12 @@ func (client *ApiClient) InitFileList() error {
 
 		// add all results (files) to list
 		for _, f := range fileList.Files {
-			newList[f.Id] = f
+			newList[f.Id] = &backbone.FileObject{
+				Id:           f.Id,
+				Name:         f.Name,
+				Size:         f.Size,
+				ModifiedTime: parseTime(f.ModifiedTime), // RFC 3339 date-time: 2018-08-03T12:03:30.407Z
+			}
 		}
 
 		// break loop (no more pages)
@@ -160,7 +180,7 @@ func (client *ApiClient) UpdateFileList() error {
 	}
 
 	// config
-	fields := "nextPageToken, newStartPageToken, changes(file(id, name, size, md5Checksum, trashed, mimeType, parents, modifiedTime))"
+	fields := "nextPageToken, newStartPageToken, changes(file(id, name, size, trashed, mimeType, parents, modifiedTime))"
 	spaces := "drive"               // Supported values are 'drive', 'appDataFolder' and 'photos'.
 	pageSize := client.apiQuerySize // split big file lists in pages (default 1000)
 
@@ -192,7 +212,12 @@ func (client *ApiClient) UpdateFileList() error {
 							delete(client.fileList, change.File.Id)
 						} else {
 							// update or add file
-							client.fileList[change.File.Id] = change.File
+							client.fileList[change.File.Id] = &backbone.FileObject{
+								Id:           change.File.Id,
+								Name:         change.File.Name,
+								Size:         change.File.Size,
+								ModifiedTime: parseTime(change.File.ModifiedTime), // RFC 3339 date-time: 2018-08-03T12:03:30.407Z
+							}
 						}
 					}
 				}
@@ -205,16 +230,25 @@ func (client *ApiClient) UpdateFileList() error {
 			// no more pages
 			// set the new NewStartPageToken for the next UpdateFileList() call
 			client.changeStartPageToken = changeList.NewStartPageToken
-			return nil
+			break
 		}
 	}
+
+	// write cache file
+	err := client.saveStatus()
+	if err != nil {
+		// :*(
+		fmt.Printf("%v\n", err)
+	}
+
+	return nil
 }
 
 // FileList gibt alle Dateien in einem bestimmten Ordner zurück.
 // Es werden keine Unterordner berücksichtigt!
 // Diese Methode ist offline!
 // Für aktuelle Date muss InitFileList() bzw. UpdateFileList() aufgerufen werden.
-// Min. enthalten sind: id, name, size, md5Checksum, modifiedTime
+// Min. enthalten sind: id, name, size, modifiedTime
 func (client *ApiClient) FileList() map[string]*backbone.FileObject {
 	ret := make(map[string]*backbone.FileObject)
 
@@ -223,17 +257,136 @@ func (client *ApiClient) FileList() map[string]*backbone.FileObject {
 			Id:           v.Id,
 			Name:         v.Name,
 			Size:         v.Size,
-			Md5Checksum:  v.Md5Checksum,
-			ModifiedTime: parseTime(v.ModifiedTime), // RFC 3339 date-time: 2018-08-03T12:03:30.407Z
+			ModifiedTime: v.ModifiedTime,
 		}
 	}
 
 	return ret
 }
 
+//--------------------------------------------------------------------------------------------------------------------//
+
+type cacheClient struct {
+	FileList             map[string]*backbone.FileObject
+	ChangeStartPageToken string
+	CacheSig             string
+}
+
+// saveStatus speichert die FileList in einer Datei um später mit loadStatus() die InitFileList() Funktion zu beschleunigen.
+func (client *ApiClient) saveStatus() error {
+
+	// leerer String deaktivert diese Funktion
+	if client.cachePath == "" {
+		return nil // ok
+	}
+
+	// Datei anlegen
+	fh, err := os.Create(client.cachePath)
+	if err != nil {
+		return fmt.Errorf("can't create cache file: %v", err)
+	}
+	defer fh.Close()
+
+	// calc cache signature
+	sig, err := client.calcCacheSig()
+	if err != nil {
+		return fmt.Errorf("can't calc cache signature: %v", err)
+	}
+
+	// Objekt zum Serialisieren vorbereiten
+	obj := &cacheClient{FileList: client.fileList, ChangeStartPageToken: client.changeStartPageToken, CacheSig: sig}
+
+	// Daten schreiben
+	if err := gob.NewEncoder(fh).Encode(obj); err != nil {
+		return fmt.Errorf("can't write/encode cache file: %v", err)
+	}
+
+	return nil
+}
+
+// loadStatus lädt eine FileList aus einer Datei und stellt damit den Zustand zu einem Zeitpunkt wiederher.
+// Der Status muss jedoch mit einem erfolgreichen UpdateFileList() validiert werden!
+func (client *ApiClient) loadStatus() error {
+
+	// leerer String deaktivert diese Funktion
+	if client.cachePath == "" {
+		return nil // ok
+	}
+
+	// cache exist check
+	if _, err := os.Stat(client.cachePath); err != nil {
+		return fmt.Errorf("no cache file found! first call?: %v", err)
+	}
+
+	// Datei öffnen
+	fh, err := os.Open(client.cachePath)
+	if err != nil {
+		return fmt.Errorf("can't open cache file: %v", err)
+	}
+	defer fh.Close()
+
+	// Daten lesen (cacheClient deserialisieren)
+	var cacheClient cacheClient
+	if err := gob.NewDecoder(fh).Decode(&cacheClient); err != nil {
+		return fmt.Errorf("can't read/decode cache file: %v", err)
+	}
+
+	// check cache signature
+	sig, err := client.calcCacheSig()
+	if err != nil {
+		return fmt.Errorf("can't calc cache signature: %v", err)
+	}
+	if cacheClient.CacheSig != sig {
+		return fmt.Errorf("wrong cache signature: load='%s', calc='%s'", cacheClient.CacheSig, sig)
+	}
+
+	// einen neuen Client baun für den UpdateFileList() test
+	newClient := &ApiClient{
+		folderId:     client.folderId,
+		apiQuerySize: client.apiQuerySize,
+		cachePath:    client.cachePath,
+		api:          client.api,
+
+		changeStartPageToken: cacheClient.ChangeStartPageToken,
+		fileList:             cacheClient.FileList,
+	}
+
+	err = newClient.UpdateFileList()
+	if err != nil {
+		return fmt.Errorf("cacheClient UpdateFileList call fail: %v", err)
+	}
+
+	// die aktuelle FileList in den aktiven client übertragen
+	client.fileList = newClient.fileList
+	client.changeStartPageToken = newClient.changeStartPageToken
+
+	return nil
+}
+
+// calcCacheSig berechnet einen String um Caches fix einem oauth file und der rootFolderId zuzuordnen.
+func (client *ApiClient) calcCacheSig() (string, error) {
+	badSig := fmt.Sprintf("%d", time.Now().Unix())
+
+	// get user id
+	about, err := client.api.About.Get().Fields("user(permissionId)").Do()
+	if err != nil {
+		return badSig, err
+	}
+
+	folderId := client.folderId
+	accountId := about.User.PermissionId
+
+	// check accountId
+	if len(accountId) < 3 {
+		return badSig, fmt.Errorf("invalid PermissionId: %s", accountId)
+	}
+
+	return fmt.Sprintf("%s|%s", folderId, accountId), nil
+}
+
 // parseTime wandelt einen RFC 3339 date-time string in ein Time Objekt.
 // Beispiel für einen input: 2018-08-03T12:03:30.407Z
-func parseTime(t string) time.Time {
+func parseTime(t string) int64 {
 
 	// parse
 	ret := &time.Time{}
@@ -242,9 +395,9 @@ func parseTime(t string) time.Time {
 	// error ??  Das ist blöd! Dürfte nicht passieren!
 	if err != nil {
 		fmt.Printf("WARNING: can't parse time '%s': %v", t, err)
-		return time.Now()
+		return time.Now().Unix() - 4730000000 // -150 Jahre
 	}
 
 	// OK
-	return *ret
+	return ret.Unix()
 }

@@ -2,7 +2,6 @@ package backbone
 
 import (
 	"io"
-	"time"
 )
 
 // Client ist ein Interface um auf Speicher wie Google Drive oder der lokalen Festplatte zuzugreifen.
@@ -43,8 +42,6 @@ type Client interface {
 }
 
 // FileObject kann eine Datei oder ein Ordner sein.
-// Immer angegeben sind Id, Name und ModifiedTime.
-// Size und Md5Checksum können bei einem Ordner entfallen.
 type FileObject struct {
 	// Mit der ID wird eine Datei oder ein Ordner eindeutig identifiziert. Der Name ist dafür nicht geeignet!
 	// Beispiel von der Google Drive Implementierung: 1pl-ypWWGeF4sdgrlW-hH9PVz2gEvHWUJ
@@ -56,13 +53,9 @@ type FileObject struct {
 
 	// Die letzte Änderung/Aktualisierung des Objekts.
 	// Wurde eine Datei nie verändert, entspricht es dem Erstellungszeitpunkt.
-	ModifiedTime time.Time
+	ModifiedTime int64
 
 	// Die Dateigröße in Byte.
 	// Bei Ordnern ist dieser Wert immer 0.
 	Size int64
-
-	// Der MD5-Hash als HEX-String.
-	// Bei Ordnern ist dieser String leer.
-	Md5Checksum string
 }

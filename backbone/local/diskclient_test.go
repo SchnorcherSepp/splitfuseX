@@ -92,8 +92,8 @@ func TestNewDiskClient(t *testing.T) {
 				if f.Size != int64(len(upload[i]["text"])) {
 					t.Errorf("wrong size: %d != %d", f.Size, len(upload[i]["text"]))
 				}
-				timeDiff := time.Now().UnixNano() - f.ModifiedTime.UnixNano()
-				if timeDiff < 900000000 || timeDiff > 10000000000 {
+				timeDiff := time.Now().Unix() - f.ModifiedTime
+				if timeDiff < 0 || timeDiff > 5 {
 					t.Errorf("wrong modifiedTime: %v | %v", f.ModifiedTime, timeDiff)
 				}
 			}

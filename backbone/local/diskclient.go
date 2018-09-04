@@ -88,8 +88,7 @@ func (client *DiskClient) InitFileList() error {
 				Id:           id,
 				Name:         f.Name(),
 				Size:         f.Size(),
-				ModifiedTime: f.ModTime(),
-				Md5Checksum:  "", // not implemented
+				ModifiedTime: f.ModTime().Unix(),
 			}
 		}
 	}

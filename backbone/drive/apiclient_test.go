@@ -1,9 +1,7 @@
 package drive
 
 import (
-	"crypto/md5"
 	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"strings"
@@ -25,7 +23,7 @@ func TestApiClient(t *testing.T) {
 
 	// --- TEST NewApiClient()
 	// Wenn ein ApiClient bezogen werden kann, dann hat bereits alles funktioniert.
-	tmp := NewApiClient("client_secret.json", "token.json", testFolder)
+	tmp := NewApiClient("/home/user/client_secret.json", "/home/user/token.json", "/home/user/cache.dat", testFolder)
 	if tmp == nil {
 		t.Error("can't create an ApiClient")
 	}
@@ -53,14 +51,9 @@ func TestApiClient(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		// calc md5 hash from upload file (text)
-		hash := md5.New()
-		hash.Write([]byte(text))
-		md5sum := hex.EncodeToString(hash.Sum(nil))
 		// map
 		upload[i] = make(map[string]string)
 		upload[i]["fileId"] = fileId
-		upload[i]["md5sum"] = md5sum
 		upload[i]["text"] = text
 	}
 
@@ -103,11 +96,8 @@ func TestApiClient(t *testing.T) {
 				if f.Size != int64(len(upload[i]["text"])) {
 					t.Errorf("wrong size: %d != %d", f.Size, len(upload[i]["text"]))
 				}
-				if f.Md5Checksum != upload[i]["md5sum"] {
-					t.Errorf("wrong md5Checksum: %s != %s", f.Md5Checksum, upload[i]["md5sum"])
-				}
-				timeDiff := time.Now().UnixNano() - f.ModifiedTime.UnixNano()
-				if timeDiff < 10000000 || timeDiff > 11100000000 {
+				timeDiff := time.Now().Unix() - f.ModifiedTime
+				if timeDiff < 0 || timeDiff > 20 {
 					t.Errorf("wrong modifiedTime: %v | %v", f.ModifiedTime, timeDiff)
 				}
 			}

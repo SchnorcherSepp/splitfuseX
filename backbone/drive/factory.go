@@ -13,7 +13,8 @@ import (
 // NewApiClient gibt einen drive api client zurück.
 // Die folderId gibt den Ordner mit den Chunks an (default ist root).
 // Im Fehlerfall terminiert das Programm mit os.Exit (siehe loadApiConfig() und loadToken())
-func NewApiClient(clientSecretPath, tokenFilePath, folderId string) backbone.Client {
+// HINWEIS: Bleibt der cachePath leer, dann ist diese Funktionalität deaktiviert!
+func NewApiClient(clientSecretPath, tokenFilePath, cachePath, folderId string) backbone.Client {
 
 	// load client_secret file
 	config := loadApiConfig(clientSecretPath, false)
@@ -33,6 +34,6 @@ func NewApiClient(clientSecretPath, tokenFilePath, folderId string) backbone.Cli
 
 	// return
 	var ret *ApiClient
-	ret = &ApiClient{api: api, folderId: folderId}
+	ret = &ApiClient{api: api, folderId: folderId, cachePath: cachePath}
 	return ret
 }
