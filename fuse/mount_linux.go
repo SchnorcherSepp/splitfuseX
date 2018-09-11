@@ -2,6 +2,7 @@ package fuse
 
 import (
 	"fmt"
+	"sync"
 
 	"splitfuseX/backbone"
 	"splitfuseX/core"
@@ -32,6 +33,7 @@ func MountNormal(apiClient backbone.Client, dbFileName, keyFilePath, mountpoint 
 		dbFileName: dbFileName,
 		keyFile:    core.LoadKeyfile(keyFilePath),
 		apiClient:  apiClient,
+		mutex:      &sync.Mutex{},
 	}
 
 	// Alle Dateien von google Drive laden

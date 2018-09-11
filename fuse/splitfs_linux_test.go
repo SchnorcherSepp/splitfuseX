@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,6 +39,7 @@ func TestCheckDbUpdate(t *testing.T) {
 		dbFileName: "index.db",
 		keyFile:    core.KeyFile{},
 		apiClient:  local.NewDiskClient(testFolder),
+		mutex:      &sync.Mutex{},
 	}
 
 	// PHASE 0

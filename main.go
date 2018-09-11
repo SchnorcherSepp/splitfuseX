@@ -66,7 +66,7 @@ var (
 )
 
 func main() {
-	app.Version("splitfuseX 3.13")
+	app.Version("splitfuseX 3.14beta")
 	app.UsageTemplate(kingpin.LongHelpTemplate)
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 

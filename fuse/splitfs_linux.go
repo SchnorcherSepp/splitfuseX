@@ -2,6 +2,7 @@ package fuse
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"splitfuseX/backbone"
@@ -22,6 +23,7 @@ type SplitFs struct {
 	keyFile    core.KeyFile    // Keyfile mit allen Schlüsseln
 	apiClient  backbone.Client // Verbindung zu Google Drive! ACHTUNG: .InitFileList() muss bereits passiert sein!!
 
+	mutex        *sync.Mutex
 	db           core.SfDb // Datenbank
 	lastDbUpdate int64     // wann wurde zuletzt checkDbUpdate() ausgeführt (Unix Time)
 	lastDbMtime  int64     // die mtime des zuletzt geladenen DB files (RFC 3339 date-time: 2018-08-03T12:03:30.407Z)
@@ -38,8 +40,12 @@ type SplitFs struct {
 //   405 ... Fehler beim Download der DB
 //   406 ... Fehler beim Entschlüsseln der DB (MAC)
 func (fs *SplitFs) checkDbUpdate() int {
+	// LOCK / UNLOCK
+	fs.mutex.Lock()
+	defer fs.mutex.Unlock()
+
 	// check interval
-	var interval int64 = 5 * 60
+	var interval int64 = 10 * 60 // 10 min
 	if fs.interval > 0 {
 		interval = fs.interval
 	}
@@ -126,6 +132,9 @@ func (fs *SplitFs) checkDbUpdate() int {
 
 // GetAttr gibt die File-Attribute für Einträge aus der DB zurück.
 func (fs *SplitFs) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse.Status) {
+	// db update triggern
+	fs.checkDbUpdate()
+
 	// FIX: root
 	if name == "" {
 		name = "."
