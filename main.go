@@ -66,7 +66,7 @@ var (
 )
 
 func main() {
-	app.Version("splitfuseX 3.14beta")
+	app.Version("splitfuseX 3.14")
 	app.UsageTemplate(kingpin.LongHelpTemplate)
 	command := kingpin.MustParse(app.Parse(os.Args[1:]))
 
@@ -171,6 +171,10 @@ func uploadFunc(keyFile, dbFile, dir, module, destination, apiClient, apiToken s
 	client := clientModule(module, destination, apiClient, apiToken, "")
 
 	// fileList initialisieren
+	if debug {
+		fmt.Printf("DEBUG: init FileList\n")
+	}
+
 	err = client.InitFileList()
 	if err != nil {
 		panic(err)
@@ -178,6 +182,10 @@ func uploadFunc(keyFile, dbFile, dir, module, destination, apiClient, apiToken s
 	clientFileList := client.FileList()
 
 	// search new stuff (welche chunks sind noch nicht am Speicher (drive oder local)
+	if debug {
+		fmt.Printf("DEBUG: search new stuff\n")
+	}
+
 	for origFilePath, dbFileObj := range db {
 
 		// alle Dateien in der DB ...
