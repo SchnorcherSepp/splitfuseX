@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="3.13"
+VERSION="3.14"
  
 DLURL="https://github.com/SchnorcherSepp/splitfuseX/releases/download/$VERSION/splitfuseX"
 INSTALLPATH="/usr/bin/splitfuse"
